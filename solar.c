@@ -1,5 +1,6 @@
 #define OUTPUTSECJUMP 0.01666666666 // 60 hz
 #define OUTPUTLIMIT imgcount < 1800
+#define NUMPLANETS 64
 
 
 //#define USEOUTPUT
@@ -77,6 +78,13 @@ const char * fsblurshaderfrag = "\
 		return fract(sin(dot(co.xy,vec2(12.9898,78.233))) * 43758.5453);\n\
 	}\n\
 	void main(){\n\
+//#define EDGEDETECT\n\
+#ifdef EDGEDETECT\n\
+		ivec2 ts = textureSize(texture0, 0);\n\
+		vec3 initial = texture(texture0, screencoord + 1.0/ts).rgb;\n\
+		vec3 point = texelFetch(texture0, ivec2(screencoord * ts), 0).rgb;\n\
+		gl_FragColor.rgba = vec4(length(initial - point));\n\
+#else\n\
 		vec3 gather = textureLod(texture0, screencoord, 1.0 + rand2s(screencoord * 1.0)).rgb;\n\
 		gather += textureLod(texture0, screencoord, 2.0 + rand2s(screencoord * 2.0)).rgb;\n\
 		gather += textureLod(texture0, screencoord, 3.0 + rand2s(screencoord * 3.0)).rgb;\n\
@@ -88,6 +96,7 @@ const char * fsblurshaderfrag = "\
 		gather += textureLod(texture0, screencoord, 9.0 + rand2s(screencoord * 9.0)).rgb;\n\
 		gather = texture(texture0, screencoord).rgb + gather* 0.2;\n\
 		gl_FragColor.rgba = vec4(gather, 1.0);\n\
+#endif\n\
 	}\n\
 ";
 
@@ -167,7 +176,7 @@ void genPlanets(size_t np){
 
 int main(void){
 	srand(time(0));
-	genPlanets(64);
+	genPlanets(NUMPLANETS);
 	GLFWwindow * window;
 	if(!glfwInit()) return -1;
 	window 	= glfwCreateWindow(width, height, "solar", NULL, NULL);
