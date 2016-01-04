@@ -1,11 +1,11 @@
 #define OUTPUTSECJUMP 0.01666666666 // 60 hz
 #define OUTPUTLIMIT imgcount < 1800
-#define NUMPLANETS 64
+#define NUMPLANETS 8
 
 
 //#define USEOUTPUT
 #define POSTPROCESS
-
+//#define USEFRAMEBUFFER
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +19,13 @@
 
 #ifdef USEOUTPUT
 #include "stb_image_write.h"
+#endif
+
+#ifdef USEFRAMEBUFFER
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <linux/fb.h>
+#include <sys/mman.h>
 #endif
 
 #define TRUE 1
@@ -66,7 +73,7 @@ const char * fsshadervert ="\
 	varying vec2 screencoord;\n\
 	void main(){\n\
 		gl_Position = vec4(posattrib, 0.0, 1.0);\n\
-		screencoord = (posattrib + vec2(1.0))* 0.5 ;\n\
+		screencoord = (posattrib + vec2(1.0)) * 0.5;\n\
 	}\n\
 ";
 	// dunno where i got the rand2s... probably iq. afl pasted it in irc
@@ -174,7 +181,41 @@ void genPlanets(size_t np){
 
 }
 
+#ifdef USEFRAMEBUFFER
+int fb_fd = 0;
+struct fb_fix_screeninfo finfo;
+struct fb_var_screeninfo vinfo;
+unsigned char *fbp;
+int fbwidth =-1;
+int fbheight = -1;
+void initfb(void){
+	fb_fd = open("/dev/fb0", O_RDWR);
+	ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo);
+	vinfo.grayscale = 0;
+	vinfo.bits_per_pixel = 32;
+	ioctl(fb_fd, FBIOPUT_VSCREENINFO, &vinfo);
+	ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo);
+//	vinfo.xres_virtual = vinfo.xres;
+//	vinfo.yres_virtual = vinfo.yres;
+//	vinfo.xoffset = 0;
+//	vinfo.yoffset = 0;
+//	ioctl(fb_fd, FBIOPUT_VSCREENINFO, &vinfo);
+//	ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo);
+	ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo);
+
+	printf("framebuffer offsets are %i %i %i\n", vinfo.xoffset, vinfo.yoffset, finfo.line_length);
+
+	long screensize = vinfo.yres_virtual * finfo.line_length;
+	fbwidth = vinfo.xres;
+	fbheight = vinfo.yres;
+
+	fbp = mmap(0, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, (off_t) 0);
+}
+#endif
 int main(void){
+	#ifdef USEFRAMEBUFFER
+		initfb();
+	#endif
 	srand(time(0));
 	genPlanets(NUMPLANETS);
 	GLFWwindow * window;
@@ -357,6 +398,9 @@ int main(void){
 
 
 	double oldsec = glfwGetTime();
+	#ifdef USEFRAMEBUFFER
+	GLubyte * imagedata = malloc(width * height * 4);
+	#endif
 	#ifdef USEOUTPUT
 	GLubyte * imagedata = malloc(width * height * 3);
 	long long unsigned int imgcount = 0;
@@ -444,9 +488,18 @@ int main(void){
 			if(stbi_write_tga(filename, width, height, 3, imagedata)){
 				printf("Wrote %s\n", filename);
 			} else {
-			printf("Error writing %s\n", filename);
-			return TRUE;
-		}
+				printf("Error writing %s\n", filename);
+				return TRUE;
+			}
+		#endif
+
+		#ifdef USEFRAMEBUFFER
+			glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, imagedata);
+//			glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, fbp + (vinfo.xoffset * vinfo.bits_per_pixel/8) + vinfo.yoffset * finfo.line_length);
+			int line;
+			for(line = 0; line < height; line++){
+				memcpy(fbp + (vinfo.xoffset * vinfo.bits_per_pixel/8) + (line + vinfo.yoffset) * finfo.line_length, imagedata + line * width * 4, width * 4);
+			}
 		#endif
 
 		glfwSwapBuffers(window);
