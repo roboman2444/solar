@@ -1,10 +1,10 @@
 #define OUTPUTSECJUMP 0.01666666666 // 60 hz
 #define OUTPUTLIMIT imgcount < 1800
-#define NUMPLANETS 8
+#define NUMPLANETS 20
 
 
 //#define USEOUTPUT
-#define POSTPROCESS
+//#define POSTPROCESS
 //#define USEFRAMEBUFFER
 
 #include <stdio.h>
@@ -40,7 +40,7 @@ const char * circleshadervert = "\
 	varying vec2 tc;\n\
 	uniform mat4 proj;\n\
 	void main(){\n\
-		col = colattrib * 2.0;\n\
+		col = colattrib * 1.0;\n\
 		tc = tcattrib;\n\
 		gl_Position = proj * vec4(posattrib, 1.0);\n\
 	}\n\
@@ -51,7 +51,12 @@ const char * circleshaderfrag = "\
 	void main(){\n\
 		float dist = length(tc);\n\
 		if(dist >=1.0) discard;\n\
-		gl_FragColor.rgba = vec4(col, 1.0);\n\
+		vec2 dister = vec2(dFdx(dist), dFdy(dist));\n\
+		float crazy = length(dister);\n\
+		dist=abs(1.0-crazy-dist)/crazy;\n\
+		float res = max(0.0, mix(1.0, 0.0, dist));\n\
+//		if(res <=0.0) discard;\n\
+		gl_FragColor.rgba = vec4(col*res, 1.0);\n\
 	}\n\
 ";
 const char * lineshadervert = "\
@@ -87,10 +92,27 @@ const char * fsblurshaderfrag = "\
 	void main(){\n\
 //#define EDGEDETECT\n\
 #ifdef EDGEDETECT\n\
-		ivec2 ts = textureSize(texture0, 0);\n\
-		vec3 initial = texture(texture0, screencoord + 1.0/ts).rgb;\n\
-		vec3 point = texelFetch(texture0, ivec2(screencoord * ts), 0).rgb;\n\
-		gl_FragColor.rgba = vec4(length(initial - point));\n\
+		vec3 point;\n\
+		float len = 0.0;\n\
+		vec3 initial = texture(texture0, screencoord).rgb;\n\
+		point = textureOffset(texture0, screencoord, ivec2(-1.0, 0.0)).rgb;\n\
+		len += step(0.5, length(initial-point));\n\
+		point = textureOffset(texture0, screencoord, ivec2(1.0, 0.0)).rgb;\n\
+		len += step(0.5, length(initial-point));\n\
+		point = textureOffset(texture0, screencoord, ivec2(0.0, -1.0)).rgb;\n\
+		len += step(0.5, length(initial-point));\n\
+		point = textureOffset(texture0, screencoord, ivec2(0.0, 1.0)).rgb;\n\
+		len += step(0.5, length(initial-point));\n\
+\
+//		point = textureOffset(texture0, screencoord, ivec2(-1.0, 1.0)).rgb;\n\
+//		len += step(0.5, length(initial-point));\n\
+//		point = textureOffset(texture0, screencoord, ivec2(1.0, 1.0)).rgb;\n\
+//		len += step(0.5, length(initial-point));\n\
+//		point = textureOffset(texture0, screencoord, ivec2(-1.0, -1.0)).rgb;\n\
+//		len += step(0.5, length(initial-point));\n\
+//		point = textureOffset(texture0, screencoord, ivec2(1.0, -1.0)).rgb;\n\
+//		len += step(0.5, length(initial-point));\n\
+		gl_FragColor.rgb = vec3(len * 0.1 * initial);\n\
 #else\n\
 		vec3 gather = textureLod(texture0, screencoord, 1.0 + rand2s(screencoord * 1.0)).rgb;\n\
 		gather += textureLod(texture0, screencoord, 2.0 + rand2s(screencoord * 2.0)).rgb;\n\
@@ -212,13 +234,59 @@ void initfb(void){
 	fbp = mmap(0, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, (off_t) 0);
 }
 #endif
+float projmat[16] = {0.0};
+
+GLuint fb1, fb1rb, fb1t;
+GLuint shaderid, lineshaderid;
+GLFWwindow * window;
+
+int resize(int inwidth, int inheight){
+	width = inwidth;
+	height = inheight;
+//generate projection matrix
+	double sine, cotangent, deltaZ;
+	double fov = 90.0, aspect = (double)width/(double)height;
+	double far = 100.0, near = 0.1;
+	double radians = fov / 2.0 * M_PI / 180.0;
+	deltaZ = far - near;
+	sine = sin(radians);
+	cotangent = cos(radians)/sine;
+	projmat[0*4+0] = cotangent / aspect;
+	projmat[1*4+1] = cotangent;
+	projmat[2*4+2] = -(far + near) / deltaZ;
+	projmat[2*4+3] = -1.0;
+	projmat[3*4+2] = -2.0 * near * far / deltaZ;
+
+#ifdef POSTPROCESS
+
+	glBindRenderbuffer(GL_RENDERBUFFER, fb1rb);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, width, height);
+
+	glBindTexture(GL_TEXTURE_2D, fb1t);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+
+#endif
+
+	glUseProgram(shaderid);
+	GLuint projloc = glGetUniformLocation(shaderid, "proj");
+	glUniformMatrix4fv(projloc, 1, GL_FALSE, projmat);
+
+	glUseProgram(lineshaderid);
+	GLuint lprojloc = glGetUniformLocation(lineshaderid, "proj");
+	glUniformMatrix4fv(lprojloc, 1, GL_FALSE, projmat);
+
+
+	glfwSetWindowSize(window, width, height);
+	glViewport(0,0, width, height);
+	printf("resizzie %i %i\n", width, height);
+}
+
 int main(void){
 	#ifdef USEFRAMEBUFFER
 		initfb();
 	#endif
 	srand(time(0));
 	genPlanets(NUMPLANETS);
-	GLFWwindow * window;
 	if(!glfwInit()) return -1;
 	window 	= glfwCreateWindow(width, height, "solar", NULL, NULL);
 	if (!window){
@@ -234,21 +302,8 @@ int main(void){
 	}
 	//gl and glew are good 2 go
 	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
 
-//generate projection matrix
-	float projmat[16] = {0.0};
-	double sine, cotangent, deltaZ;
-	double fov = 90.0, aspect = (double)width/(double)height;
-	double far = 100.0, near = 0.1;
-	double radians = fov / 2.0 * M_PI / 180.0;
-	deltaZ = far - near;
-	sine = sin(radians);
-	cotangent = cos(radians)/sine;
-	projmat[0*4+0] = cotangent / aspect;
-	projmat[1*4+1] = cotangent;
-	projmat[2*4+2] = -(far + near) / deltaZ;
-	projmat[2*4+3] = -1.0;
-	projmat[3*4+2] = -2.0 * near * far / deltaZ;
 
 
 //circle shader
@@ -260,7 +315,7 @@ int main(void){
 	shader_printShaderLogStatus(vertid);
 	glCompileShader(fragid);
 	shader_printShaderLogStatus(fragid);
-	GLuint shaderid = glCreateProgram();
+	shaderid = glCreateProgram();
 	if(!shaderid) printf("unable to greate program\n");
 	glAttachShader(shaderid, vertid);
 	glAttachShader(shaderid, fragid);
@@ -272,8 +327,6 @@ int main(void){
 	glDeleteShader(fragid);
 	shader_printProgramLogStatus(shaderid);
 	glUseProgram(shaderid);
-	GLuint projloc = glGetUniformLocation(shaderid, "proj");
-	glUniformMatrix4fv(projloc, 1, GL_FALSE, projmat);
 
 
 
@@ -286,7 +339,7 @@ int main(void){
 	shader_printShaderLogStatus(vertid);
 	glCompileShader(fragid);
 	shader_printShaderLogStatus(fragid);
-	GLuint lineshaderid = glCreateProgram();
+	lineshaderid = glCreateProgram();
 	if(!lineshaderid) printf("unable to greate program\n");
 	glAttachShader(lineshaderid, vertid);
 	glAttachShader(lineshaderid, fragid);
@@ -298,8 +351,6 @@ int main(void){
 	glDeleteShader(fragid);
 	shader_printProgramLogStatus(lineshaderid);
 	glUseProgram(lineshaderid);
-	GLuint lprojloc = glGetUniformLocation(lineshaderid, "proj");
-	glUniformMatrix4fv(lprojloc, 1, GL_FALSE, projmat);
 	GLuint colloc = glGetUniformLocation(lineshaderid, "col");
 #ifdef POSTPROCESS
 
@@ -326,7 +377,6 @@ int main(void){
 	glUniform1i(texloc, 0);
 
 	//set up framebuffer
-	GLuint fb1, fb1rb, fb1t;
 	glGenFramebuffers(1, &fb1);
 	glBindFramebuffer(GL_FRAMEBUFFER, fb1);
 	glGenRenderbuffers(1, &fb1rb);
@@ -344,6 +394,9 @@ int main(void){
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fb1t, 0);
 
+
+
+	resize(width, height);
 
 	//swole
 	GLfloat fsquad[12] = {-1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0,};
@@ -465,6 +518,8 @@ int main(void){
 			glDrawArrays(GL_LINE_STRIP, 0, p.numtrail);
 
 		}
+		glClear(GL_DEPTH_BUFFER_BIT);
+
 		glUseProgram(shaderid);
 		glVertexAttribPointer(POSATTRIBLOC, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), verts);
 		glDrawElements(GL_TRIANGLES, numplanets * 6, GL_UNSIGNED_INT, indices);
@@ -503,5 +558,13 @@ int main(void){
 		#endif
 
 		glfwSwapBuffers(window);
+		glfwPollEvents();
+		if(glfwWindowShouldClose(window)){
+			glfwTerminate();
+			exit(0);
+		}
+		int iw, ih;
+		glfwGetWindowSize(window, &iw, &ih);
+		if(iw != width || ih != height) resize(iw, ih);
 	}
 }
