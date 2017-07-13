@@ -178,19 +178,6 @@ size_t numplanets;
 void genPlanets(size_t np){
 	numplanets = np;
 	planets = malloc(np * sizeof(planet_t));
-	unsigned int i;
-	for(i = 1; i < np; i++){
-		planet_t *p = &planets[i];
-		p->size = (double)rand()/(double)RAND_MAX * 0.1;
-		p->dist = (double)rand()/(double)RAND_MAX * 2.0;
-		p->period = 5.0/p->dist;
-		if(!(rand() % 10)) p->period*= -1.0;
-		p->color[0] = (double)rand()/(double)RAND_MAX;
-		p->color[1] = (double)rand()/(double)RAND_MAX;
-		p->color[2] = (double)rand()/(double)RAND_MAX;
-		p->sizetrail = 512;
-		p->verts = malloc(p->sizetrail * 3 *sizeof(GLfloat));
-	}
 	planet_t *p = planets;
 	p->size = 0.1;
 	p->dist = 0.0;
@@ -200,6 +187,25 @@ void genPlanets(size_t np){
 	p->color[2] = 0.0;
 	p->sizetrail = 512;
 	p->verts = malloc(p->sizetrail * 3 *sizeof(GLfloat));
+
+	unsigned int i;
+	for(i = 1; i < np; i++){
+		planet_t *p = &planets[i];
+		p->size = (double)rand()/(double)RAND_MAX * 0.1;
+		p->dist = (double)rand()/(double)RAND_MAX * 2.0;
+
+		//check possible collisions with earlier planets
+		int j;
+		for(j = 0; j < i; j++) if(p->dist + p->size > planets[j].dist - planets[j].size && p->dist - p->size < planets[j].dist + planets[j].size) break;
+		if(i != j){i--; /*printf("Skipped\n"); */continue;}
+		p->period = 5.0/p->dist;
+		if(!(rand() % 10)) p->period*= -1.0;
+		p->color[0] = (double)rand()/(double)RAND_MAX;
+		p->color[1] = (double)rand()/(double)RAND_MAX;
+		p->color[2] = (double)rand()/(double)RAND_MAX;
+		p->sizetrail = 512;
+		p->verts = malloc(p->sizetrail * 3 *sizeof(GLfloat));
+	}
 
 }
 
