@@ -169,8 +169,39 @@ typedef struct planet_s {
 	int numtrail;
 	int sizetrail;
 	int postrail;
-	GLfloat * verts;
+	GLfloat * verts;	//pre-offset positions of line verts
+	GLfloat * ofs;		//unit vector offset in 3d?
 }planet_t;
+
+GLuint trailindices = 0;
+
+int genIndices(int num){
+	//figure out the number of line segements
+	int seg = num-1;
+	if(seg < 1) return 0;
+	//4 triangles per segment, except for the last segment, which is only 2
+	int tris = 4 * seg -2;
+	if(trailindices) free(trailindices();
+	trailindices = malloc(tris * 3 * sizeof (GLuint));
+
+	//generate maintrails
+	int i;
+	for(i = 0; i < seg; i++){
+		tris[i*12 + 0] = seg;
+		tris[i*12 + 1] = seg+1;
+		tris[i*12 + 2] = seg+2;
+
+		tris[i*12 + 3] = seg+3;
+		tris[i*12 + 4] = seg+2;
+		tris[i*12 + 5] = seg+1;
+	}
+	//generate conbars
+	for(i = 1; i < seg; i++){
+		tris[i*12 + 5] = seg+3;
+		tris[i*12 + 6] = seg+4;
+		tris[i*12 + 7] = seg+2;
+	}
+}
 
 planet_t *planets;
 
@@ -204,7 +235,8 @@ void genPlanets(size_t np){
 		p->color[1] = (double)rand()/(double)RAND_MAX;
 		p->color[2] = (double)rand()/(double)RAND_MAX;
 		p->sizetrail = 512;
-		p->verts = malloc(p->sizetrail * 3 *sizeof(GLfloat));
+		p->verts = malloc(p->sizetrail * 6 *sizeof(GLfloat));
+		p->verts = malloc(p->sizetrail * 4 *sizeof(GLfloat));
 	}
 
 }
