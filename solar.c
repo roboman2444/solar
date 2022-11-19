@@ -174,15 +174,15 @@ typedef struct planet_s {
 }planet_t;
 
 GLuint trailindices = 0;
-
+/*
 int genIndices(int num){
 	//figure out the number of line segements
 	int seg = num-1;
 	if(seg < 1) return 0;
 	//4 triangles per segment, except for the last segment, which is only 2
 	int tris = 4 * seg -2;
-	if(trailindices) free(trailindices();
-	trailindices = malloc(tris * 3 * sizeof (GLuint));
+//	if(trailindices) free(trailindices();
+//	trailindices = malloc(tris * 3 * sizeof (GLuint));
 
 	//generate maintrails
 	int i;
@@ -202,7 +202,7 @@ int genIndices(int num){
 		tris[i*12 + 7] = seg+2;
 	}
 }
-
+*/
 planet_t *planets;
 
 size_t numplanets;
